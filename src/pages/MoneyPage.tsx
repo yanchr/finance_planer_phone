@@ -147,7 +147,7 @@ function IncomeSection({
   const [title, setTitle] = useState('')
   const [amount, setAmount] = useState('')
   const [currency, setCurrency] = useState<CurrencyCode>('CHF')
-  const [frequency, setFrequency] = useState<IncomeFrequency>('monthly')
+  const [frequency, setFrequency] = useState<IncomeFrequency>('one_time')
   const [date, setDate] = useState(todayISO())
   const [error, setError] = useState('')
 
@@ -236,8 +236,8 @@ function IncomeSection({
               }
               className="min-h-12 rounded-2xl border border-line bg-surface-raised px-4 font-semibold outline-none focus:border-pine"
             >
-              <option value="monthly">Monthly</option>
               <option value="one_time">One-time</option>
+              <option value="monthly">Monthly</option>
             </select>
           </label>
           <Field
