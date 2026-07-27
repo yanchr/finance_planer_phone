@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Plus, Trash2 } from 'lucide-react'
 import { db } from '../db'
@@ -15,7 +15,7 @@ import {
 import { formatAmount, formatCHF, toCHF } from '../lib/currency'
 import { createId } from '../lib/id'
 import { getCategoryIcon } from '../lib/icons'
-import type { CurrencyCode } from '../types'
+import type { CurrencyCode, Transaction } from '../types'
 import { Button } from '../components/ui/Button'
 import { CategorySelect } from '../components/ui/CategorySelect'
 import { CurrencySelect } from '../components/ui/CurrencySelect'
@@ -57,8 +57,15 @@ export function DashboardPage() {
   const safeToSpend = calcSafeToSpendToday(budget, spentMonth, spentToday)
   const withinBudget = safeToSpend >= 0
 
-  const todayTx = transactions.filter(
-    (t) => t.type === 'daily' && t.date === today,
+  const monthTx = useMemo(
+    () =>
+      transactions
+        .filter((t) => t.type === 'daily' && monthKey(t.date) === thisMonth)
+        .sort((a, b) => {
+          if (a.date !== b.date) return b.date.localeCompare(a.date)
+          return b.createdAt - a.createdAt
+        }),
+    [transactions, thisMonth],
   )
 
   async function handleAdd(e: React.FormEvent) {
@@ -204,15 +211,15 @@ export function DashboardPage() {
 
       <section className="animate-fade-up stagger-3">
         <h2 className="mb-3 text-[13px] font-semibold tracking-wide text-ink-muted uppercase">
-          Today
+          This month
         </h2>
-        {todayTx.length === 0 ? (
+        {monthTx.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-line px-4 py-8 text-center text-sm text-ink-faint">
             No expenses yet — add your first one above.
           </p>
         ) : (
           <ul className="space-y-2">
-            {todayTx.map((tx) => {
+            {monthTx.map((tx) => {
               const cat = categories.find((c) => c.id === tx.categoryId)
               const Icon = getCategoryIcon(cat?.icon ?? 'tag')
               return (
@@ -220,26 +227,26 @@ export function DashboardPage() {
                   key={tx.id}
                   className="flex items-center gap-3 rounded-2xl border border-line bg-surface-raised px-3 py-3"
                 >
-                  <span className="flex size-10 items-center justify-center rounded-xl bg-pine-soft text-pine">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-pine-soft text-pine">
                     <Icon className="size-5" strokeWidth={1.75} />
                   </span>
                   <div className="min-w-0 flex-1 text-left">
                     <p className="truncate font-semibold text-ink">
                       {cat?.name ?? 'Unknown'}
+                      <span className="ml-1.5 font-normal text-ink-faint">
+                        · {tx.date.slice(8)}
+                      </span>
                     </p>
                     <p className="truncate text-xs text-ink-muted">
-                      {tx.note || formatAmount(tx.amount, tx.originalCurrency)}
-                      {tx.originalCurrency !== 'CHF' &&
-                        ` · ${formatCHF(tx.amountInCHF)}`}
+                      {formatAmount(tx.amount, tx.originalCurrency)}
+                      {tx.note ? ` · ${tx.note}` : ''}
                     </p>
                   </div>
-                  <p className="font-display text-lg font-semibold text-ink">
-                    {formatCHF(tx.amountInCHF)}
-                  </p>
+                  <EditableCHFAmount transaction={tx} />
                   <button
                     type="button"
                     aria-label="Delete"
-                    className="rounded-xl p-2 text-ink-faint active:bg-coral-soft active:text-coral"
+                    className="shrink-0 rounded-xl p-2 text-ink-faint active:bg-coral-soft active:text-coral"
                     onClick={() => void db.transactions.delete(tx.id)}
                   >
                     <Trash2 className="size-4" />
@@ -251,5 +258,72 @@ export function DashboardPage() {
         )}
       </section>
     </div>
+  )
+}
+
+function EditableCHFAmount({ transaction }: { transaction: Transaction }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editing) inputRef.current?.select()
+  }, [editing])
+
+  function startEdit() {
+    setValue(String(Math.round(transaction.amountInCHF * 100) / 100))
+    setEditing(true)
+  }
+
+  async function commit() {
+    const num = parseFloat(value.replace(',', '.'))
+    if (!num || num <= 0) {
+      setEditing(false)
+      return
+    }
+    const amountInCHF = num
+    const amount =
+      transaction.originalCurrency === 'CHF'
+        ? amountInCHF
+        : amountInCHF * transaction.exchangeRateUsed
+
+    await db.transactions.update(transaction.id, {
+      amountInCHF,
+      amount,
+    })
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="decimal"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => void commit()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            void commit()
+          }
+          if (e.key === 'Escape') setEditing(false)
+        }}
+        className="font-display w-[6.5rem] rounded-xl border border-pine bg-white px-2 py-1 text-right text-lg font-semibold text-ink outline-none ring-2 ring-pine/20"
+        aria-label="Edit amount in CHF"
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={startEdit}
+      className="font-display shrink-0 rounded-lg px-1 text-lg font-semibold text-ink active:bg-pine-soft"
+      title="Tap to edit"
+    >
+      {formatCHF(transaction.amountInCHF)}
+    </button>
   )
 }

@@ -9,13 +9,13 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'Frankly — Personal Finance',
         short_name: 'Frankly',
         description: 'Offline-first personal finance tracker with CHF base currency',
-        theme_color: '#0D7A5F',
-        background_color: '#EEF2F1',
+        theme_color: '#0A2540',
+        background_color: '#F7F4EF',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
