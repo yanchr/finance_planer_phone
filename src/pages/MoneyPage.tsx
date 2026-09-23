@@ -25,6 +25,7 @@ import type {
   RecurringFrequency,
   Transaction,
 } from '../types'
+import { AmountField } from '../components/ui/AmountField'
 import { Button } from '../components/ui/Button'
 import { CategorySelect } from '../components/ui/CategorySelect'
 import { CurrencySelect } from '../components/ui/CurrencySelect'
@@ -209,12 +210,9 @@ function IncomeSection({
           placeholder="Salary"
         />
         <div className="flex gap-2">
-          <Field
-            label="Amount"
+          <AmountField
             value={amount}
             onChange={setAmount}
-            inputMode="decimal"
-            placeholder="0.00"
             className="flex-1"
           />
           <label className="flex flex-col gap-1.5">
@@ -360,13 +358,10 @@ function BigExpenseSection({
         className="space-y-3 rounded-3xl border border-line bg-surface-raised p-4"
       >
         <div className="flex gap-2">
-          <Field
-            label="Amount"
+          <AmountField
             value={amount}
             onChange={setAmount}
-            inputMode="decimal"
             className="flex-1"
-            placeholder="0.00"
           />
           <label className="flex flex-col gap-1.5">
             <span className="text-[12px] font-semibold tracking-wide text-ink-muted uppercase">
@@ -516,12 +511,9 @@ function RecurringSection({
           placeholder="Rent"
         />
         <div className="flex gap-2">
-          <Field
-            label="Amount"
+          <AmountField
             value={amount}
             onChange={setAmount}
-            inputMode="decimal"
-            placeholder="0.00"
             className="flex-1"
           />
           <label className="flex flex-col gap-1.5">

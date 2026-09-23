@@ -6,6 +6,7 @@ import { useExchangeRates } from '../hooks/useExchangeRates'
 import { useSortedCategories } from '../hooks/useSortedCategories'
 import {
   calcSafeToSpendToday,
+  calcSafeToSpendTomorrow,
   dailySpentInMonth,
   dailySpentToday,
   daysRemainingInMonth,
@@ -16,6 +17,7 @@ import { formatAmount, formatCHF, toCHF } from '../lib/currency'
 import { createId } from '../lib/id'
 import { getCategoryIcon } from '../lib/icons'
 import type { Category, CurrencyCode, Transaction } from '../types'
+import { AmountField, toggleAmountSign, isAmountNegative } from '../components/ui/AmountField'
 import { Button } from '../components/ui/Button'
 import { CategorySelect } from '../components/ui/CategorySelect'
 import { CurrencySelect } from '../components/ui/CurrencySelect'
@@ -55,6 +57,7 @@ export function DashboardPage() {
   const budget = settings?.monthlyBudgetCHF ?? 3000
   const daysLeft = daysRemainingInMonth()
   const safeToSpend = calcSafeToSpendToday(budget, spentMonth, spentToday)
+  const safeTomorrow = calcSafeToSpendTomorrow(budget, spentMonth)
   const withinBudget = safeToSpend >= 0
 
   const monthTx = useMemo(
@@ -133,10 +136,16 @@ export function DashboardPage() {
         <p className="mt-1 text-sm opacity-80">
           {daysLeft} day{daysLeft === 1 ? '' : 's'} left in the month
         </p>
-        <div className="mt-4 flex gap-6 text-sm">
+        <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
           <div>
             <p className="opacity-70">Spent today</p>
             <p className="font-semibold">{formatCHF(spentToday)}</p>
+          </div>
+          <div>
+            <p className="opacity-70">Tomorrow</p>
+            <p className="font-semibold">
+              {safeTomorrow === null ? '—' : formatCHF(safeTomorrow)}
+            </p>
           </div>
           <div>
             <p className="opacity-70">Month so far</p>
@@ -154,15 +163,10 @@ export function DashboardPage() {
         className="animate-fade-up stagger-2 space-y-3 rounded-3xl border border-line bg-surface-raised p-4 shadow-sm shadow-ink/5"
       >
         <div className="flex gap-2">
-          <Field
-            label="Amount"
-            type="text"
-            inputMode="decimal"
-            placeholder="0.00"
+          <AmountField
             value={amount}
             onChange={setAmount}
             className="flex-1"
-            autoComplete="off"
           />
           <label className="flex flex-col gap-1.5">
             <span className="text-[12px] font-semibold tracking-wide text-ink-muted uppercase">
@@ -391,24 +395,41 @@ function EditableCHFAmount({ transaction }: { transaction: Transaction }) {
   }
 
   if (editing) {
+    const negative = isAmountNegative(value)
     return (
-      <input
-        ref={inputRef}
-        type="text"
-        inputMode="decimal"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={() => void commit()}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            void commit()
-          }
-          if (e.key === 'Escape') setEditing(false)
-        }}
-        className="font-display w-[6.5rem] rounded-xl border border-pine bg-white px-2 py-1 text-right text-lg font-semibold text-ink outline-none ring-2 ring-pine/20"
-        aria-label="Edit amount in CHF"
-      />
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          aria-label={negative ? 'Make positive' : 'Make negative'}
+          aria-pressed={negative}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setValue((v) => toggleAmountSign(v))}
+          className={`flex size-8 items-center justify-center rounded-lg border text-base font-semibold ${
+            negative
+              ? 'border-coral bg-coral-soft text-coral'
+              : 'border-line bg-white text-ink-muted'
+          }`}
+        >
+          {negative ? '−' : '+'}
+        </button>
+        <input
+          ref={inputRef}
+          type="text"
+          inputMode="decimal"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={() => void commit()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              void commit()
+            }
+            if (e.key === 'Escape') setEditing(false)
+          }}
+          className="font-display w-[5.5rem] rounded-xl border border-pine bg-white px-2 py-1 text-right text-lg font-semibold text-ink outline-none ring-2 ring-pine/20"
+          aria-label="Edit amount in CHF"
+        />
+      </div>
     )
   }
 

@@ -87,7 +87,11 @@ export function bigExpensesInMonth(
 
 /**
  * Safe-to-spend today:
- * (MonthlyBudget - SpentSoFarThisMonth) / DaysRemainingIncludingToday - SpentToday
+ * (MonthlyBudget - SpentBeforeToday) / DaysRemainingIncludingToday - SpentToday
+ *
+ * `spentSoFarThisMonthCHF` may include today's spend; it is subtracted out so
+ * today's spend only reduces the daily allowance once (not also via the
+ * remaining-budget division).
  */
 export function calcSafeToSpendToday(
   monthlyBudgetCHF: number,
@@ -97,9 +101,26 @@ export function calcSafeToSpendToday(
 ): number {
   const remainingDays = daysRemainingInMonth(date)
   if (remainingDays <= 0) return 0
-  const remainingBudget = monthlyBudgetCHF - spentSoFarThisMonthCHF
-  const dailyAllowance = remainingBudget / remainingDays
+  const spentBeforeToday = spentSoFarThisMonthCHF - spentTodayCHF
+  const remainingAtStartOfDay = monthlyBudgetCHF - spentBeforeToday
+  const dailyAllowance = remainingAtStartOfDay / remainingDays
   return dailyAllowance - spentTodayCHF
+}
+
+/**
+ * Projected daily allowance at the start of tomorrow
+ * (remaining budget after today's spend / days from tomorrow inclusive).
+ * Returns null on the last day of the month.
+ */
+export function calcSafeToSpendTomorrow(
+  monthlyBudgetCHF: number,
+  spentSoFarThisMonthCHF: number,
+  date = new Date(),
+): number | null {
+  const remainingDays = daysRemainingInMonth(date)
+  const daysFromTomorrow = remainingDays - 1
+  if (daysFromTomorrow <= 0) return null
+  return (monthlyBudgetCHF - spentSoFarThisMonthCHF) / daysFromTomorrow
 }
 
 export function calcNetFlow(
