@@ -1,9 +1,13 @@
 import {
   Car,
+  Dumbbell,
   Home,
+  Plane,
+  Shirt,
   ShoppingBag,
   Ticket,
   Utensils,
+  Wine,
   Zap,
   Tag,
   type LucideIcon,
@@ -16,6 +20,10 @@ const ICON_MAP: Record<string, LucideIcon> = {
   ticket: Ticket,
   'shopping-bag': ShoppingBag,
   zap: Zap,
+  wine: Wine,
+  dumbbell: Dumbbell,
+  shirt: Shirt,
+  plane: Plane,
   tag: Tag,
 }
 
@@ -26,6 +34,10 @@ export const CATEGORY_ICON_OPTIONS = [
   { id: 'ticket', label: 'Fun' },
   { id: 'shopping-bag', label: 'Shop' },
   { id: 'zap', label: 'Utilities' },
+  { id: 'wine', label: 'Alcohol' },
+  { id: 'dumbbell', label: 'Hobby' },
+  { id: 'shirt', label: 'Clothes' },
+  { id: 'plane', label: 'Holidays' },
   { id: 'tag', label: 'Other' },
 ] as const
 
