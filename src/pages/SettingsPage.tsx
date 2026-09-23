@@ -49,7 +49,7 @@ export function SettingsPage() {
   async function handleExport() {
     const blob = await exportBackup()
     const stamp = new Date().toISOString().slice(0, 10)
-    downloadBlob(blob, `frankly-backup-${stamp}.json`)
+    downloadBlob(blob, `yc-financer-backup-${stamp}.json`)
     setBackupMsg('Backup downloaded')
   }
 
@@ -305,7 +305,7 @@ export function SettingsPage() {
       </section>
 
       <p className="pb-4 text-center text-xs text-ink-faint">
-        Frankly · offline-first · base currency CHF
+        Y.C Financer · offline-first · base currency CHF
       </p>
     </div>
   )

@@ -1,4 +1,4 @@
-# Frankly — Personal Finance PWA
+# Y.C Financer — Personal Finance PWA
 
 Offline-first Progressive Web App for personal finance tracking. Base currency is **CHF**. Built with React, TypeScript, Tailwind CSS, Dexie (IndexedDB), and `vite-plugin-pwa`.
 

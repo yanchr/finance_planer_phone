@@ -110,7 +110,7 @@ export function DashboardPage() {
       <header className="animate-fade-up flex items-start justify-between gap-3">
         <div>
           <p className="font-display text-3xl font-semibold tracking-tight text-ink">
-            Frankly
+            Y.C Financer
           </p>
           <p className="mt-0.5 text-sm text-ink-muted">Log today&apos;s spend</p>
         </div>

@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Frankly — Personal Finance',
-        short_name: 'Frankly',
+        name: 'Y.C Financer',
+        short_name: 'Y.C Financer',
         description: 'Offline-first personal finance tracker with CHF base currency',
         theme_color: '#0A2540',
         background_color: '#F7F4EF',
