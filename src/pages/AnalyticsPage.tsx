@@ -111,37 +111,40 @@ export function AnalyticsPage() {
 
   const categoryAverages = useMemo(() => {
     const currentMonth = monthKey(todayISO())
+    const activeMonths = new Set<string>()
     const byCat = new Map<string, Map<string, number>>()
+
     for (const tx of dailyTx) {
       const m = monthKey(tx.date)
       if (m >= currentMonth) continue
+      activeMonths.add(m)
       if (!byCat.has(tx.categoryId)) byCat.set(tx.categoryId, new Map())
       const monthMap = byCat.get(tx.categoryId)!
       monthMap.set(m, (monthMap.get(m) ?? 0) + tx.amountInCHF)
     }
+
+    const monthKeys = [...activeMonths].sort()
+    if (monthKeys.length === 0) return []
+
     return [...byCat.entries()]
       .map(([categoryId, monthMap]) => {
-        const monthKeys = [...monthMap.keys()].sort()
-        const values = monthKeys.map((m) => monthMap.get(m)!)
-        const avg =
-          values.length > 0
-            ? values.reduce((a, b) => a + b, 0) / values.length
-            : 0
+        const values = monthKeys.map((m) => monthMap.get(m) ?? 0)
+        const avg = values.reduce((a, b) => a + b, 0) / monthKeys.length
         const cat = categories.find((c) => c.id === categoryId)
         return {
           categoryId,
           name: cat?.name ?? 'Unknown',
           icon: cat?.icon ?? 'tag',
           avg,
-          months: values.length,
+          months: monthKeys.length,
           monthKeys,
         }
       })
-      .filter((row) => row.months > 0)
       .sort((a, b) => b.avg - a.avg)
   }, [dailyTx, categories])
 
   const monthTotal = categoryBreakdown.reduce((s, c) => s + c.amount, 0)
+  const averageSpendTotal = categoryAverages.reduce((s, c) => s + c.avg, 0)
 
   const categoryTransactions = useMemo(() => {
     if (!selectedCategoryId) return []
@@ -435,9 +438,16 @@ export function AnalyticsPage() {
       </section>
 
       <section className="animate-fade-up stagger-4">
-        <h2 className="mb-3 text-[13px] font-semibold tracking-wide text-ink-muted uppercase">
-          Category averages
-        </h2>
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-[13px] font-semibold tracking-wide text-ink-muted uppercase">
+            Category averages
+          </h2>
+          {categoryAverages.length > 0 && (
+            <p className="font-display text-lg font-semibold">
+              {formatCHF(averageSpendTotal)}
+            </p>
+          )}
+        </div>
         {categoryAverages.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-line px-4 py-8 text-center text-sm text-ink-faint">
             Not enough history yet.
