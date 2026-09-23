@@ -24,7 +24,7 @@ import {
   todayISO,
   totalMonthlyRecurringCHF,
 } from '../lib/calculations'
-import { formatCHF } from '../lib/currency'
+import { formatAmount, formatCHF } from '../lib/currency'
 import { getCategoryIcon } from '../lib/icons'
 
 const PIE_COLORS = [
@@ -55,6 +55,12 @@ export function AnalyticsPage() {
   }, [transactions, incomes])
 
   const [selectedMonth, setSelectedMonth] = useState(monthKey(todayISO()))
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
+    null,
+  )
+  const [selectedAvgCategoryId, setSelectedAvgCategoryId] = useState<
+    string | null
+  >(null)
 
   const dailyTx = transactions.filter((t) => t.type === 'daily')
   const monthlyRecurring = totalMonthlyRecurringCHF(recurring)
@@ -104,16 +110,19 @@ export function AnalyticsPage() {
   }, [incomes, transactions, monthlyRecurring])
 
   const categoryAverages = useMemo(() => {
+    const currentMonth = monthKey(todayISO())
     const byCat = new Map<string, Map<string, number>>()
     for (const tx of dailyTx) {
       const m = monthKey(tx.date)
+      if (m >= currentMonth) continue
       if (!byCat.has(tx.categoryId)) byCat.set(tx.categoryId, new Map())
       const monthMap = byCat.get(tx.categoryId)!
       monthMap.set(m, (monthMap.get(m) ?? 0) + tx.amountInCHF)
     }
     return [...byCat.entries()]
       .map(([categoryId, monthMap]) => {
-        const values = [...monthMap.values()]
+        const monthKeys = [...monthMap.keys()].sort()
+        const values = monthKeys.map((m) => monthMap.get(m)!)
         const avg =
           values.length > 0
             ? values.reduce((a, b) => a + b, 0) / values.length
@@ -125,12 +134,57 @@ export function AnalyticsPage() {
           icon: cat?.icon ?? 'tag',
           avg,
           months: values.length,
+          monthKeys,
         }
       })
+      .filter((row) => row.months > 0)
       .sort((a, b) => b.avg - a.avg)
   }, [dailyTx, categories])
 
   const monthTotal = categoryBreakdown.reduce((s, c) => s + c.amount, 0)
+
+  const selectedCategory = categoryBreakdown.find(
+    (c) => c.categoryId === selectedCategoryId,
+  )
+
+  const categoryTransactions = useMemo(() => {
+    if (!selectedCategoryId) return []
+    return dailyTx
+      .filter(
+        (t) =>
+          t.categoryId === selectedCategoryId &&
+          monthKey(t.date) === selectedMonth,
+      )
+      .sort((a, b) => {
+        if (a.date !== b.date) return b.date.localeCompare(a.date)
+        return b.createdAt - a.createdAt
+      })
+  }, [dailyTx, selectedCategoryId, selectedMonth])
+
+  const selectedAvgCategory = categoryAverages.find(
+    (c) => c.categoryId === selectedAvgCategoryId,
+  )
+
+  const avgCategoryTransactions = useMemo(() => {
+    if (!selectedAvgCategory) return []
+    const months = new Set(selectedAvgCategory.monthKeys)
+    return dailyTx
+      .filter(
+        (t) =>
+          t.categoryId === selectedAvgCategory.categoryId &&
+          months.has(monthKey(t.date)),
+      )
+      .sort((a, b) => {
+        if (a.date !== b.date) return b.date.localeCompare(a.date)
+        return b.createdAt - a.createdAt
+      })
+  }, [dailyTx, selectedAvgCategory])
+
+  function periodLabel(monthKeys: string[]): string {
+    if (monthKeys.length === 0) return ''
+    if (monthKeys.length === 1) return monthLabel(monthKeys[0])
+    return `${monthLabel(monthKeys[0])} – ${monthLabel(monthKeys[monthKeys.length - 1])}`
+  }
 
   return (
     <div className="space-y-5 pt-2">
@@ -149,7 +203,10 @@ export function AnalyticsPage() {
         </span>
         <select
           value={selectedMonth}
-          onChange={(e) => setSelectedMonth(e.target.value)}
+          onChange={(e) => {
+            setSelectedMonth(e.target.value)
+            setSelectedCategoryId(null)
+          }}
           className="min-h-12 rounded-2xl border border-line bg-surface-raised px-4 font-semibold outline-none focus:border-pine"
         >
           {months.map((m) => (
@@ -261,29 +318,93 @@ export function AnalyticsPage() {
             <ul className="mt-2 space-y-2">
               {categoryBreakdown.map((row, i) => {
                 const Icon = getCategoryIcon(row.icon)
+                const selected = row.categoryId === selectedCategoryId
                 return (
-                  <li
-                    key={row.categoryId}
-                    className="flex items-center gap-3 text-sm"
-                  >
-                    <span
-                      className="size-2.5 rounded-full"
-                      style={{
-                        background: PIE_COLORS[i % PIE_COLORS.length],
-                      }}
-                    />
-                    <Icon className="size-4 text-ink-muted" />
-                    <span className="flex-1 font-medium">{row.name}</span>
-                    <span className="text-ink-muted">
-                      {row.pct.toFixed(0)}%
-                    </span>
-                    <span className="font-semibold tabular-nums">
-                      {formatCHF(row.amount)}
-                    </span>
+                  <li key={row.categoryId}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedCategoryId((id) =>
+                          id === row.categoryId ? null : row.categoryId,
+                        )
+                      }
+                      className={`flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left text-sm transition ${
+                        selected
+                          ? 'bg-pine-soft text-pine ring-1 ring-pine/25'
+                          : 'active:bg-surface-sunken'
+                      }`}
+                    >
+                      <span
+                        className="size-2.5 shrink-0 rounded-full"
+                        style={{
+                          background: PIE_COLORS[i % PIE_COLORS.length],
+                        }}
+                      />
+                      <Icon className="size-4 shrink-0 text-ink-muted" />
+                      <span className="flex-1 font-medium text-ink">
+                        {row.name}
+                      </span>
+                      <span className="text-ink-muted">
+                        {row.pct.toFixed(0)}%
+                      </span>
+                      <span className="font-semibold tabular-nums text-ink">
+                        {formatCHF(row.amount)}
+                      </span>
+                    </button>
                   </li>
                 )
               })}
             </ul>
+
+            {selectedCategory && (
+              <div className="mt-4 border-t border-line pt-4">
+                <div className="mb-2 flex items-baseline justify-between gap-2">
+                  <h3 className="text-[12px] font-semibold tracking-wide text-ink-muted uppercase">
+                    {selectedCategory.name} · {monthLabel(selectedMonth)}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategoryId(null)}
+                    className="text-xs font-semibold text-ink-muted active:text-ink"
+                  >
+                    Clear
+                  </button>
+                </div>
+                {categoryTransactions.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-ink-faint">
+                    No items in this category.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {categoryTransactions.map((tx) => (
+                      <li
+                        key={tx.id}
+                        className="flex items-center gap-3 rounded-2xl border border-line bg-surface-sunken px-3 py-2.5"
+                      >
+                        <div className="min-w-0 flex-1 text-left">
+                          <p className="truncate font-semibold text-ink">
+                            {tx.note || (
+                              <span className="font-normal text-ink-faint">
+                                Untitled
+                              </span>
+                            )}
+                            <span className="ml-1.5 font-normal text-ink-faint">
+                              · {tx.date.slice(8)}
+                            </span>
+                          </p>
+                          <p className="truncate text-xs text-ink-muted">
+                            {formatAmount(tx.amount, tx.originalCurrency)}
+                          </p>
+                        </div>
+                        <p className="font-display shrink-0 text-base font-semibold">
+                          {formatCHF(tx.amountInCHF)}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </>
         )}
       </section>
@@ -323,30 +444,102 @@ export function AnalyticsPage() {
             Not enough history yet.
           </p>
         ) : (
-          <ul className="space-y-2">
-            {categoryAverages.map((row) => {
-              const Icon = getCategoryIcon(row.icon)
-              return (
-                <li
-                  key={row.categoryId}
-                  className="flex items-center gap-3 rounded-2xl border border-line bg-surface-raised px-3 py-3"
-                >
-                  <span className="flex size-10 items-center justify-center rounded-xl bg-pine-soft text-pine">
-                    <Icon className="size-5" />
-                  </span>
-                  <div className="min-w-0 flex-1 text-left">
-                    <p className="font-semibold">{row.name}</p>
-                    <p className="text-xs text-ink-muted">
-                      Avg over {row.months} month{row.months === 1 ? '' : 's'}
-                    </p>
-                  </div>
-                  <p className="font-display text-lg font-semibold">
-                    {formatCHF(row.avg)}
+          <>
+            <ul className="space-y-2">
+              {categoryAverages.map((row) => {
+                const Icon = getCategoryIcon(row.icon)
+                const selected = row.categoryId === selectedAvgCategoryId
+                return (
+                  <li key={row.categoryId}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedAvgCategoryId((id) =>
+                          id === row.categoryId ? null : row.categoryId,
+                        )
+                      }
+                      className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${
+                        selected
+                          ? 'border-pine bg-pine-soft ring-1 ring-pine/25'
+                          : 'border-line bg-surface-raised active:bg-surface-sunken'
+                      }`}
+                    >
+                      <span
+                        className={`flex size-10 items-center justify-center rounded-xl ${
+                          selected
+                            ? 'bg-pine text-white'
+                            : 'bg-pine-soft text-pine'
+                        }`}
+                      >
+                        <Icon className="size-5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-ink">{row.name}</p>
+                        <p className="text-xs text-ink-muted">
+                          Avg over {row.months} month
+                          {row.months === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                      <p className="font-display text-lg font-semibold text-ink">
+                        {formatCHF(row.avg)}
+                      </p>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+
+            {selectedAvgCategory && (
+              <div className="mt-4 rounded-3xl border border-line bg-surface-raised p-4">
+                <div className="mb-2 flex items-baseline justify-between gap-2">
+                  <h3 className="text-[12px] font-semibold tracking-wide text-ink-muted uppercase">
+                    {selectedAvgCategory.name} ·{' '}
+                    {periodLabel(selectedAvgCategory.monthKeys)}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAvgCategoryId(null)}
+                    className="text-xs font-semibold text-ink-muted active:text-ink"
+                  >
+                    Clear
+                  </button>
+                </div>
+                {avgCategoryTransactions.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-ink-faint">
+                    No items in this period.
                   </p>
-                </li>
-              )
-            })}
-          </ul>
+                ) : (
+                  <ul className="space-y-2">
+                    {avgCategoryTransactions.map((tx) => (
+                      <li
+                        key={tx.id}
+                        className="flex items-center gap-3 rounded-2xl border border-line bg-surface-sunken px-3 py-2.5"
+                      >
+                        <div className="min-w-0 flex-1 text-left">
+                          <p className="truncate font-semibold text-ink">
+                            {tx.note || (
+                              <span className="font-normal text-ink-faint">
+                                Untitled
+                              </span>
+                            )}
+                            <span className="ml-1.5 font-normal text-ink-faint">
+                              · {tx.date.slice(5)}
+                            </span>
+                          </p>
+                          <p className="truncate text-xs text-ink-muted">
+                            {formatAmount(tx.amount, tx.originalCurrency)}
+                          </p>
+                        </div>
+                        <p className="font-display shrink-0 text-base font-semibold">
+                          {formatCHF(tx.amountInCHF)}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>

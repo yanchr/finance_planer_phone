@@ -15,7 +15,7 @@ import {
 import { formatAmount, formatCHF, toCHF } from '../lib/currency'
 import { createId } from '../lib/id'
 import { getCategoryIcon } from '../lib/icons'
-import type { CurrencyCode, Transaction } from '../types'
+import type { Category, CurrencyCode, Transaction } from '../types'
 import { Button } from '../components/ui/Button'
 import { CategorySelect } from '../components/ui/CategorySelect'
 import { CurrencySelect } from '../components/ui/CurrencySelect'
@@ -72,7 +72,7 @@ export function DashboardPage() {
     e.preventDefault()
     setError('')
     const num = parseFloat(amount.replace(',', '.'))
-    if (!num || num <= 0) {
+    if (!Number.isFinite(num) || num === 0) {
       setError('Enter a valid amount')
       return
     }
@@ -192,7 +192,7 @@ export function DashboardPage() {
             className="flex-1"
           />
           <Field
-            label="Note"
+            label="Name"
             type="text"
             placeholder="Optional"
             value={note}
@@ -219,45 +219,141 @@ export function DashboardPage() {
           </p>
         ) : (
           <ul className="space-y-2">
-            {monthTx.map((tx) => {
-              const cat = categories.find((c) => c.id === tx.categoryId)
-              const Icon = getCategoryIcon(cat?.icon ?? 'tag')
-              return (
-                <li
-                  key={tx.id}
-                  className="flex items-center gap-3 rounded-2xl border border-line bg-surface-raised px-3 py-3"
-                >
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-pine-soft text-pine">
-                    <Icon className="size-5" strokeWidth={1.75} />
-                  </span>
-                  <div className="min-w-0 flex-1 text-left">
-                    <p className="truncate font-semibold text-ink">
-                      {cat?.name ?? 'Unknown'}
-                      <span className="ml-1.5 font-normal text-ink-faint">
-                        · {tx.date.slice(8)}
-                      </span>
-                    </p>
-                    <p className="truncate text-xs text-ink-muted">
-                      {formatAmount(tx.amount, tx.originalCurrency)}
-                      {tx.note ? ` · ${tx.note}` : ''}
-                    </p>
-                  </div>
-                  <EditableCHFAmount transaction={tx} />
-                  <button
-                    type="button"
-                    aria-label="Delete"
-                    className="shrink-0 rounded-xl p-2 text-ink-faint active:bg-coral-soft active:text-coral"
-                    onClick={() => void db.transactions.delete(tx.id)}
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
-                </li>
-              )
-            })}
+            {monthTx.map((tx) => (
+              <MonthTransactionRow
+                key={tx.id}
+                transaction={tx}
+                categories={categories}
+              />
+            ))}
           </ul>
         )}
       </section>
     </div>
+  )
+}
+
+function MonthTransactionRow({
+  transaction,
+  categories,
+}: {
+  transaction: Transaction
+  categories: Category[]
+}) {
+  const [editing, setEditing] = useState<'category' | 'note' | null>(null)
+  const [noteValue, setNoteValue] = useState('')
+  const noteRef = useRef<HTMLInputElement>(null)
+
+  const cat = categories.find((c) => c.id === transaction.categoryId)
+  const Icon = getCategoryIcon(cat?.icon ?? 'tag')
+
+  useEffect(() => {
+    if (editing === 'note') noteRef.current?.select()
+  }, [editing])
+
+  function startNoteEdit() {
+    setNoteValue(transaction.note)
+    setEditing('note')
+  }
+
+  async function commitNote() {
+    const next = noteValue.trim()
+    if (next !== transaction.note) {
+      await db.transactions.update(transaction.id, { note: next })
+    }
+    setEditing(null)
+  }
+
+  async function changeCategory(categoryId: string) {
+    if (categoryId !== transaction.categoryId) {
+      await db.transactions.update(transaction.id, { categoryId })
+    }
+    setEditing(null)
+  }
+
+  return (
+    <li className="rounded-2xl border border-line bg-surface-raised px-3 py-3">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          aria-label="Change category"
+          title="Tap to change category"
+          onClick={() =>
+            setEditing((e) => (e === 'category' ? null : 'category'))
+          }
+          className={`flex size-10 shrink-0 items-center justify-center rounded-xl text-pine transition ${
+            editing === 'category'
+              ? 'bg-pine text-white ring-2 ring-pine/20'
+              : 'bg-pine-soft active:bg-pine/20'
+          }`}
+        >
+          <Icon className="size-5" strokeWidth={1.75} />
+        </button>
+
+        {editing === 'note' ? (
+          <input
+            ref={noteRef}
+            type="text"
+            value={noteValue}
+            onChange={(e) => setNoteValue(e.target.value)}
+            onBlur={() => void commitNote()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                void commitNote()
+              }
+              if (e.key === 'Escape') setEditing(null)
+            }}
+            placeholder="Add a name"
+            className="min-w-0 flex-1 rounded-xl border border-pine bg-white px-2 py-1.5 text-sm text-ink outline-none ring-2 ring-pine/20"
+            aria-label="Edit name"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={startNoteEdit}
+            title="Tap to edit name"
+            className="min-w-0 flex-1 rounded-lg px-1 text-left active:bg-pine-soft"
+          >
+            <p className="truncate font-semibold text-ink">
+              {transaction.note ? (
+                transaction.note
+              ) : (
+                <span className="font-normal text-ink-faint">Add name</span>
+              )}
+              <span className="ml-1.5 font-normal text-ink-faint">
+                · {transaction.date.slice(8)}
+              </span>
+            </p>
+            <p className="truncate text-xs text-ink-muted">
+              {cat?.name ?? 'Unknown'}
+              {' · '}
+              {formatAmount(transaction.amount, transaction.originalCurrency)}
+            </p>
+          </button>
+        )}
+
+        <EditableCHFAmount transaction={transaction} />
+        <button
+          type="button"
+          aria-label="Delete"
+          className="shrink-0 rounded-xl p-2 text-ink-faint active:bg-coral-soft active:text-coral"
+          onClick={() => void db.transactions.delete(transaction.id)}
+        >
+          <Trash2 className="size-4" />
+        </button>
+      </div>
+
+      {editing === 'category' && (
+        <div className="mt-3 border-t border-line pt-3">
+          <CategorySelect
+            categories={categories}
+            value={transaction.categoryId}
+            onChange={(id) => void changeCategory(id)}
+          />
+        </div>
+      )}
+    </li>
   )
 }
 
@@ -277,7 +373,7 @@ function EditableCHFAmount({ transaction }: { transaction: Transaction }) {
 
   async function commit() {
     const num = parseFloat(value.replace(',', '.'))
-    if (!num || num <= 0) {
+    if (!Number.isFinite(num) || num === 0) {
       setEditing(false)
       return
     }
