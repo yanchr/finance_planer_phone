@@ -108,19 +108,25 @@ export function calcSafeToSpendToday(
 }
 
 /**
- * Projected daily allowance at the start of tomorrow
- * (remaining budget after today's spend / days from tomorrow inclusive).
+ * Projected daily allowance for tomorrow, assuming today's full allowance is
+ * used. Only drops once today's spend exceeds today's allowance:
+ * (RemainingAtStartOfDay - max(TodayAllowance, SpentToday)) / DaysFromTomorrow
  * Returns null on the last day of the month.
  */
 export function calcSafeToSpendTomorrow(
   monthlyBudgetCHF: number,
   spentSoFarThisMonthCHF: number,
+  spentTodayCHF: number,
   date = new Date(),
 ): number | null {
   const remainingDays = daysRemainingInMonth(date)
   const daysFromTomorrow = remainingDays - 1
   if (daysFromTomorrow <= 0) return null
-  return (monthlyBudgetCHF - spentSoFarThisMonthCHF) / daysFromTomorrow
+  const spentBeforeToday = spentSoFarThisMonthCHF - spentTodayCHF
+  const remainingAtStartOfDay = monthlyBudgetCHF - spentBeforeToday
+  const todayAllowance = remainingAtStartOfDay / remainingDays
+  const usedToday = Math.max(todayAllowance, spentTodayCHF)
+  return (remainingAtStartOfDay - usedToday) / daysFromTomorrow
 }
 
 export function calcNetFlow(

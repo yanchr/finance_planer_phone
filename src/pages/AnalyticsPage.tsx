@@ -27,6 +27,8 @@ import {
 import { formatAmount, formatCHF } from '../lib/currency'
 import { getCategoryIcon } from '../lib/icons'
 
+const BIG_EXPENSES_ID = '__big_expenses__'
+
 const PIE_COLORS = [
   '#0d7a5f',
   '#1a8a6e',
@@ -114,12 +116,13 @@ export function AnalyticsPage() {
     const activeMonths = new Set<string>()
     const byCat = new Map<string, Map<string, number>>()
 
-    for (const tx of dailyTx) {
+    for (const tx of transactions) {
       const m = monthKey(tx.date)
       if (m >= currentMonth) continue
       activeMonths.add(m)
-      if (!byCat.has(tx.categoryId)) byCat.set(tx.categoryId, new Map())
-      const monthMap = byCat.get(tx.categoryId)!
+      const key = tx.type === 'big_expense' ? BIG_EXPENSES_ID : tx.categoryId
+      if (!byCat.has(key)) byCat.set(key, new Map())
+      const monthMap = byCat.get(key)!
       monthMap.set(m, (monthMap.get(m) ?? 0) + tx.amountInCHF)
     }
 
@@ -130,21 +133,29 @@ export function AnalyticsPage() {
       .map(([categoryId, monthMap]) => {
         const values = monthKeys.map((m) => monthMap.get(m) ?? 0)
         const avg = values.reduce((a, b) => a + b, 0) / monthKeys.length
+        const isBig = categoryId === BIG_EXPENSES_ID
         const cat = categories.find((c) => c.id === categoryId)
         return {
           categoryId,
-          name: cat?.name ?? 'Unknown',
-          icon: cat?.icon ?? 'tag',
+          name: isBig ? 'Big expenses' : (cat?.name ?? 'Unknown'),
+          icon: isBig ? 'receipt' : (cat?.icon ?? 'tag'),
           avg,
           months: monthKeys.length,
           monthKeys,
         }
       })
       .sort((a, b) => b.avg - a.avg)
-  }, [dailyTx, categories])
+  }, [transactions, categories])
 
   const monthTotal = categoryBreakdown.reduce((s, c) => s + c.amount, 0)
   const averageSpendTotal = categoryAverages.reduce((s, c) => s + c.avg, 0)
+  const averageMonths = categoryAverages[0]?.monthKeys ?? []
+  const averageIncome =
+    averageMonths.length > 0
+      ? averageMonths.reduce((s, m) => s + incomeForMonth(incomes, m), 0) /
+        averageMonths.length
+      : 0
+  const averageNet = averageIncome - (averageSpendTotal + monthlyRecurring)
 
   const categoryTransactions = useMemo(() => {
     if (!selectedCategoryId) return []
@@ -167,17 +178,21 @@ export function AnalyticsPage() {
   const avgCategoryTransactions = useMemo(() => {
     if (!selectedAvgCategory) return []
     const months = new Set(selectedAvgCategory.monthKeys)
-    return dailyTx
+    const isBig = selectedAvgCategory.categoryId === BIG_EXPENSES_ID
+    return transactions
       .filter(
         (t) =>
-          t.categoryId === selectedAvgCategory.categoryId &&
-          months.has(monthKey(t.date)),
+          months.has(monthKey(t.date)) &&
+          (isBig
+            ? t.type === 'big_expense'
+            : t.type === 'daily' &&
+              t.categoryId === selectedAvgCategory.categoryId),
       )
       .sort((a, b) => {
         if (a.date !== b.date) return b.date.localeCompare(a.date)
         return b.createdAt - a.createdAt
       })
-  }, [dailyTx, selectedAvgCategory])
+  }, [transactions, selectedAvgCategory])
 
   function periodLabel(monthKeys: string[]): string {
     if (monthKeys.length === 0) return ''
@@ -443,9 +458,27 @@ export function AnalyticsPage() {
             Category averages
           </h2>
           {categoryAverages.length > 0 && (
-            <p className="font-display text-lg font-semibold">
-              {formatCHF(averageSpendTotal)}
-            </p>
+            <div className="text-right">
+              <p className="font-display text-lg font-semibold">
+                {formatCHF(averageSpendTotal)}
+              </p>
+              <p className="text-xs text-ink-muted">
+                incl. recurring{' '}
+                <span className="font-semibold text-ink">
+                  {formatCHF(averageSpendTotal + monthlyRecurring)}
+                </span>
+              </p>
+              <p className="text-xs text-ink-muted">
+                net incl. income{' '}
+                <span
+                  className={`font-semibold ${
+                    averageNet >= 0 ? 'text-pine' : 'text-coral'
+                  }`}
+                >
+                  {formatCHF(averageNet)}
+                </span>
+              </p>
+            </div>
           )}
         </div>
         {categoryAverages.length === 0 ? (

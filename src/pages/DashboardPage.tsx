@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Plus, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, Plus, Trash2 } from 'lucide-react'
 import { db } from '../db'
 import { useExchangeRates } from '../hooks/useExchangeRates'
 import { useSortedCategories } from '../hooks/useSortedCategories'
@@ -11,6 +11,7 @@ import {
   dailySpentToday,
   daysRemainingInMonth,
   monthKey,
+  monthLabel,
   todayISO,
 } from '../lib/calculations'
 import { formatAmount, formatCHF, toCHF } from '../lib/currency'
@@ -57,19 +58,44 @@ export function DashboardPage() {
   const budget = settings?.monthlyBudgetCHF ?? 3000
   const daysLeft = daysRemainingInMonth()
   const safeToSpend = calcSafeToSpendToday(budget, spentMonth, spentToday)
-  const safeTomorrow = calcSafeToSpendTomorrow(budget, spentMonth)
+  const safeTomorrow = calcSafeToSpendTomorrow(budget, spentMonth, spentToday)
   const withinBudget = safeToSpend >= 0
+
+  const [viewMonth, setViewMonth] = useState(thisMonth)
+
+  const viewableMonths = useMemo(() => {
+    const keys = new Set<string>([thisMonth])
+    for (const t of transactions) {
+      if (t.type === 'daily') keys.add(monthKey(t.date))
+    }
+    return [...keys].sort().reverse()
+  }, [transactions, thisMonth])
 
   const monthTx = useMemo(
     () =>
       transactions
-        .filter((t) => t.type === 'daily' && monthKey(t.date) === thisMonth)
+        .filter((t) => t.type === 'daily' && monthKey(t.date) === viewMonth)
         .sort((a, b) => {
           if (a.date !== b.date) return b.date.localeCompare(a.date)
           return b.createdAt - a.createdAt
         }),
-    [transactions, thisMonth],
+    [transactions, viewMonth],
   )
+
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const selectedTotal = monthTx
+    .filter((t) => selectedIds.has(t.id))
+    .reduce((s, t) => s + t.amountInCHF, 0)
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -214,12 +240,46 @@ export function DashboardPage() {
       </form>
 
       <section className="animate-fade-up stagger-3">
-        <h2 className="mb-3 text-[13px] font-semibold tracking-wide text-ink-muted uppercase">
-          This month
-        </h2>
+        <div className="mb-3 flex items-center justify-between">
+          <label className="relative flex items-center gap-1 text-[13px] font-semibold tracking-wide text-ink-muted uppercase">
+            <span>
+              {viewMonth === thisMonth ? 'This month' : monthLabel(viewMonth)}
+            </span>
+            <ChevronDown className="size-3.5" />
+            <select
+              value={viewMonth}
+              onChange={(e) => {
+                setViewMonth(e.target.value)
+                setSelectedIds(new Set())
+              }}
+              aria-label="Choose month"
+              className="absolute inset-0 cursor-pointer opacity-0"
+            >
+              {viewableMonths.map((m) => (
+                <option key={m} value={m}>
+                  {m === thisMonth ? 'This month' : monthLabel(m)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {monthTx.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectMode((on) => !on)
+                setSelectedIds(new Set())
+              }}
+              className="rounded-lg px-2 py-1 text-xs font-semibold text-pine active:bg-pine-soft"
+            >
+              {selectMode ? 'Done' : 'Select'}
+            </button>
+          )}
+        </div>
         {monthTx.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-line px-4 py-8 text-center text-sm text-ink-faint">
-            No expenses yet — add your first one above.
+            {viewMonth === thisMonth
+              ? 'No expenses yet — add your first one above.'
+              : 'No expenses in this month.'}
           </p>
         ) : (
           <ul className="space-y-2">
@@ -228,9 +288,50 @@ export function DashboardPage() {
                 key={tx.id}
                 transaction={tx}
                 categories={categories}
+                selectMode={selectMode}
+                selected={selectedIds.has(tx.id)}
+                onToggleSelect={() => toggleSelected(tx.id)}
               />
             ))}
           </ul>
+        )}
+
+        {selectMode && (
+          <div className="sticky bottom-24 z-10 mt-3 flex items-center justify-between gap-3 rounded-2xl bg-ink px-4 py-3 text-white shadow-lg shadow-ink/20">
+            <div>
+              <p className="text-xs opacity-70">
+                {selectedIds.size} selected
+              </p>
+              <p className="font-display text-xl font-semibold">
+                {formatCHF(selectedTotal)}
+              </p>
+            </div>
+            <div className="flex gap-2 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() =>
+                  setSelectedIds(
+                    selectedIds.size === monthTx.length
+                      ? new Set()
+                      : new Set(monthTx.map((t) => t.id)),
+                  )
+                }
+                className="rounded-lg px-2 py-1.5 active:bg-white/10"
+              >
+                {selectedIds.size === monthTx.length ? 'None' : 'All'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectMode(false)
+                  setSelectedIds(new Set())
+                }}
+                className="rounded-lg bg-white/15 px-3 py-1.5 active:bg-white/25"
+              >
+                Done
+              </button>
+            </div>
+          </div>
         )}
       </section>
     </div>
@@ -240,9 +341,15 @@ export function DashboardPage() {
 function MonthTransactionRow({
   transaction,
   categories,
+  selectMode,
+  selected,
+  onToggleSelect,
 }: {
   transaction: Transaction
   categories: Category[]
+  selectMode: boolean
+  selected: boolean
+  onToggleSelect: () => void
 }) {
   const [editing, setEditing] = useState<'category' | 'note' | null>(null)
   const [noteValue, setNoteValue] = useState('')
@@ -254,6 +361,56 @@ function MonthTransactionRow({
   useEffect(() => {
     if (editing === 'note') noteRef.current?.select()
   }, [editing])
+
+  useEffect(() => {
+    if (selectMode) setEditing(null)
+  }, [selectMode])
+
+  if (selectMode) {
+    return (
+      <li>
+        <button
+          type="button"
+          aria-pressed={selected}
+          onClick={onToggleSelect}
+          className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${
+            selected
+              ? 'border-pine bg-pine-soft ring-1 ring-pine/25'
+              : 'border-line bg-surface-raised active:bg-surface-sunken'
+          }`}
+        >
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-pine-soft text-pine">
+            <Icon className="size-5" strokeWidth={1.75} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold text-ink">
+              {transaction.note || (
+                <span className="font-normal text-ink-faint">Untitled</span>
+              )}
+              <span className="ml-1.5 font-normal text-ink-faint">
+                · {transaction.date.slice(8)}
+              </span>
+            </p>
+            <p className="truncate text-xs text-ink-muted">
+              {cat?.name ?? 'Unknown'}
+              {' · '}
+              {formatAmount(transaction.amount, transaction.originalCurrency)}
+            </p>
+          </div>
+          <span className="font-display shrink-0 px-1 text-lg font-semibold text-ink">
+            {formatCHF(transaction.amountInCHF)}
+          </span>
+          <span
+            className={`flex size-6 shrink-0 items-center justify-center rounded-full border-2 ${
+              selected ? 'border-pine bg-pine text-white' : 'border-line'
+            }`}
+          >
+            {selected && <Check className="size-3.5" strokeWidth={3} />}
+          </span>
+        </button>
+      </li>
+    )
+  }
 
   function startNoteEdit() {
     setNoteValue(transaction.note)

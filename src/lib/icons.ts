@@ -3,6 +3,7 @@ import {
   Dumbbell,
   Home,
   Plane,
+  Receipt,
   Shirt,
   ShoppingBag,
   Ticket,
@@ -24,6 +25,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   dumbbell: Dumbbell,
   shirt: Shirt,
   plane: Plane,
+  receipt: Receipt,
   tag: Tag,
 }
 
